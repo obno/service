@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"regexp"
-	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -35,15 +34,15 @@ type upstart struct {
 	i Interface
 	*Config
 	version string
-} 
+}
 
 func newUpstartService(i Interface, c *Config) (Service, error) {
 	s := &upstart{
-		i:      i,
-		Config: c,
+		i:       i,
+		Config:  c,
 		version: upstartVersion(),
 	}
-	
+
 	return s, nil
 }
 
@@ -74,8 +73,8 @@ func (s *upstart) hasKillStanza() bool {
 	if len(s.version) == 0 {
 		//could not get version
 		return defaultValue
-	} 
-	return s.versionAtMost("0.6.5") 
+	}
+	return s.versionAtMost("0.6.5")
 }
 
 func (s *upstart) hasSetUid() bool {
@@ -83,7 +82,7 @@ func (s *upstart) hasSetUid() bool {
 	if len(s.version) == 0 {
 		//could not get version
 		return defaultValue
-	} 
+	}
 	return s.versionAtLeast("1.4")
 }
 
@@ -100,7 +99,7 @@ func upstartVersion() string {
 		return ""
 	}
 	re := regexp.MustCompile(`init\s+\(upstart\s+([^)]+)\)`)
-	if v := =re.FindStringSubmatch(string(out)); len(v) == 2 {
+	if v := re.FindStringSubmatch(string(out)); len(v) == 2 {
 		return v[1]
 	}
 	return ""
@@ -208,7 +207,6 @@ func (s *upstart) Restart() error {
 	time.Sleep(50 * time.Millisecond)
 	return s.Start()
 }
-
 
 // The upstart script should stop with an INT or the Go runtime will terminate
 // the program before the Stop handler can run.
