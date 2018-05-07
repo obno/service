@@ -74,15 +74,17 @@ func (s *upstart) hasKillStanza() bool {
 		//could not get version
 		return defaultValue
 	}
-	return s.versionAtMost("0.6.5")
+	//according to http://upstart.ubuntu.com/cookbook/#stanzas-by-category
+	return s.versionAtLeast("1.3")
 }
 
-func (s *upstart) hasSetUid() bool {
+func (s *upstart) hasSetUidStanza() bool {
 	defaultValue := true
 	if len(s.version) == 0 {
 		//could not get version
 		return defaultValue
 	}
+	//according to http://upstart.ubuntu.com/cookbook/#stanzas-by-category
 	return s.versionAtLeast("1.4")
 }
 
@@ -142,13 +144,13 @@ func (s *upstart) Install() error {
 		*Config
 		Path               string
 		HasKillStanza      bool
-		HasSetUid          bool
+		HasSetUidStanza    bool
 		HasStartStopDaemon bool
 	}{
 		s.Config,
 		path,
 		s.hasKillStanza(),
-		s.hasSetUid(),
+		s.hasSetUidStanza(),
 		s.hasStartStopDaemon(),
 	}
 
@@ -220,7 +222,7 @@ const upstartScript = `# {{.Description}}
 start on filesystem or runlevel [2345]
 stop on runlevel [!2345]
 
-{{if and .UserName .HasSetUid}}setuid {{.UserName}}{{end}}
+{{if and .UserName .HasSetUidStanza}}setuid {{.UserName}}{{end}}
 
 respawn
 respawn limit 10 5
@@ -233,7 +235,7 @@ pre-start script
 end script
 
 # Start
-{{if and .UserName (not .HasSetUid)}}
+{{if and .UserName (not .HasSetUidStanza)}}
 {{if .HasStartStopDaemon}}
 exec start-stop-daemon --start -c {{.UserName}} --exec {{.Path}}{{range .Arguments}} {{.|cmd}}{{end}}
 {{else}}
