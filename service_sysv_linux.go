@@ -169,7 +169,11 @@ const sysvScript = `#!/bin/sh
 # Description:       {{.Description}}
 ### END INIT INFO
 
+{{if .UserName}}
+cmd="su -s /bin/sh -c 'exec \"\$0\" \"\$@\"' {{.UserName}} -- {{.Path}}{{range .Arguments}} {{.|cmd}}{{end}}"
+{{else}}
 cmd="{{.Path}}{{range .Arguments}} {{.|cmd}}{{end}}"
+{{end}}
 
 name=$(basename $(readlink -f $0))
 pid_file="/var/run/$name.pid"

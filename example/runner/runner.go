@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 
 	"github.com/kardianos/osext"
-	"github.com/kardianos/service"
+	"github.com/obno/service"
 )
 
 // Config is the runner app config structure.

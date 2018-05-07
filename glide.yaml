@@ -1,0 +1,4 @@
+package: github.com/obno/service
+ignore:
+import:
+- package: golang.org/x/sys

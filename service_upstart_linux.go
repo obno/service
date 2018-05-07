@@ -34,14 +34,16 @@ func isUpstart() bool {
 type upstart struct {
 	i Interface
 	*Config
-}
+	version string
+} 
 
 func newUpstartService(i Interface, c *Config) (Service, error) {
 	s := &upstart{
 		i:      i,
 		Config: c,
+		version: upstartVersion(),
 	}
-
+	
 	return s, nil
 }
 
@@ -69,41 +71,47 @@ func (s *upstart) configPath() (cp string, err error) {
 func (s *upstart) hasKillStanza() bool {
 	defaultValue := true
 
-	out, err := exec.Command("/sbin/init", "--version").Output()
-	if err != nil {
+	if len(s.version) == 0 {
+		//could not get version
 		return defaultValue
-	}
-
-	re := regexp.MustCompile(`init \(upstart (\d+.\d+.\d+)\)`)
-	matches := re.FindStringSubmatch(string(out))
-	if len(matches) != 2 {
-		return defaultValue
-	}
-
-	version := make([]int, 3)
-	for idx, vStr := range strings.Split(matches[1], ".") {
-		version[idx], err = strconv.Atoi(vStr)
-		if err != nil {
-			return defaultValue
-		}
-	}
-
-	maxVersion := []int{0, 6, 5}
-	if versionAtMost(version, maxVersion) {
-		return false
-	}
-
-	return defaultValue
+	} 
+	return s.versionAtMost("0.6.5") 
 }
 
-func versionAtMost(version, max []int) bool {
-	for idx, m := range max {
-		v := version[idx]
-		if v > m {
-			return false
-		}
+func (s *upstart) hasSetUid() bool {
+	defaultValue := true
+	if len(s.version) == 0 {
+		//could not get version
+		return defaultValue
+	} 
+	return s.versionAtLeast("1.4")
+}
+
+func (s *upstart) hasStartStopDaemon() bool {
+	if _, err := os.Stat("/sbin/start-stop-daemon"); err == nil {
+		return true
 	}
-	return true
+	return false
+}
+
+func upstartVersion() string {
+	out, err := exec.Command("/sbin/init", "--version").Output()
+	if err != nil {
+		return ""
+	}
+	re := regexp.MustCompile(`init\s+\(upstart\s+([^)]+)\)`)
+	if v := =re.FindStringSubmatch(string(out)); len(v) == 2 {
+		return v[1]
+	}
+	return ""
+}
+
+func (s *upstart) versionAtMost(max string) bool {
+	return strings.Compare(s.version, max) <= 0
+}
+
+func (s *upstart) versionAtLeast(min string) bool {
+	return strings.Compare(s.version, min) >= 0
 }
 
 func (s *upstart) template() *template.Template {
@@ -133,12 +141,16 @@ func (s *upstart) Install() error {
 
 	var to = &struct {
 		*Config
-		Path          string
-		HasKillStanza bool
+		Path               string
+		HasKillStanza      bool
+		HasSetUid          bool
+		HasStartStopDaemon bool
 	}{
 		s.Config,
 		path,
 		s.hasKillStanza(),
+		s.hasSetUid(),
+		s.hasStartStopDaemon(),
 	}
 
 	return s.template().Execute(f, to)
@@ -197,6 +209,7 @@ func (s *upstart) Restart() error {
 	return s.Start()
 }
 
+
 // The upstart script should stop with an INT or the Go runtime will terminate
 // the program before the Stop handler can run.
 const upstartScript = `# {{.Description}}
@@ -209,7 +222,7 @@ const upstartScript = `# {{.Description}}
 start on filesystem or runlevel [2345]
 stop on runlevel [!2345]
 
-{{if .UserName}}setuid {{.UserName}}{{end}}
+{{if and .UserName .HasSetUid}}setuid {{.UserName}}{{end}}
 
 respawn
 respawn limit 10 5
@@ -222,5 +235,14 @@ pre-start script
 end script
 
 # Start
+{{if and .UserName (not .HasSetUid)}}
+{{if .HasStartStopDaemon}}
+exec start-stop-daemon --start -c {{.UserName}} --exec {{.Path}}{{range .Arguments}} {{.|cmd}}{{end}}
+{{else}}
+exec su -s /bin/sh -c 'exec "$0" "$@"' {{.UserName}} -- {{.Path}}{{range .Arguments}} {{.|cmd}}{{end}}
+{{end}}
+{{else}}
 exec {{.Path}}{{range .Arguments}} {{.|cmd}}{{end}}
+{{end}}
+
 `
