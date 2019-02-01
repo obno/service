@@ -252,7 +252,7 @@ pre-start script
 end script
 
 {{if and .UserName .PidFilePath}}
-pre-stop exec kill -2 `cat {{.PidFilePath}}`
+pre-stop exec kill -2 ` + "`cat {{.PidFilePath}}`" + `
 {{end}}
 
 normal exit SIGTERM SIGKILL SIGINT
