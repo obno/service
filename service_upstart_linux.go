@@ -88,8 +88,19 @@ func (s *upstart) hasSetUidStanza() bool {
 	return s.versionAtLeast("1.4")
 }
 
+func (s *upstart) pidFilePath() string {
+	return s.Option.string("PIDFilePath", "")
+}
+
 func (s *upstart) hasStartStopDaemon() bool {
 	if _, err := os.Stat("/sbin/start-stop-daemon"); err == nil {
+		return true
+	}
+	return false
+}
+
+func (s *upstart) hasRunUser() bool {
+	if _, err := os.Stat("/sbin/runuser"); err == nil {
 		return true
 	}
 	return false
@@ -146,12 +157,16 @@ func (s *upstart) Install() error {
 		HasKillStanza      bool
 		HasSetUidStanza    bool
 		HasStartStopDaemon bool
+		HasRunUser         bool
+		PidFilePath        string
 	}{
 		s.Config,
 		path,
 		s.hasKillStanza(),
 		s.hasSetUidStanza(),
 		s.hasStartStopDaemon(),
+		s.hasRunUser(),
+		s.pidFilePath(),
 	}
 
 	return s.template().Execute(f, to)
@@ -216,7 +231,9 @@ const upstartScript = `# {{.Description}}
 
 {{if .DisplayName}}description    "{{.DisplayName}}"{{end}}
 
-{{if .HasKillStanza}}kill signal INT{{end}}
+{{if .HasKillStanza}}
+kill signal INT
+{{end}}
 {{if .ChRoot}}chroot {{.ChRoot}}{{end}}
 {{if .WorkingDirectory}}chdir {{.WorkingDirectory}}{{end}}
 start on filesystem or runlevel [2345]
@@ -234,10 +251,18 @@ pre-start script
     test -x {{.Path}} || { stop; exit 0; }
 end script
 
+{{if and .UserName .PidFilePath}}
+pre-stop exec kill -2 `cat {{.PidFilePath}}`
+{{end}}
+
+normal exit SIGTERM SIGKILL SIGINT
+
 # Start
 {{if and .UserName (not .HasSetUidStanza)}}
 {{if .HasStartStopDaemon}}
 exec start-stop-daemon --start -c {{.UserName}} --exec {{.Path}}{{range .Arguments}} {{.|cmd}}{{end}}
+{{else if .HasRunUser}}
+exec runuser -s /bin/bash  {{.UserName}} -c "{{.Path}} {{range .Arguments}} {{.|cmd}}{{end}}"
 {{else}}
 exec su -s /bin/sh -c 'exec "$0" "$@"' {{.UserName}} -- {{.Path}}{{range .Arguments}} {{.|cmd}}{{end}}
 {{end}}
